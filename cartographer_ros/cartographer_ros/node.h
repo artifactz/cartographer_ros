@@ -33,6 +33,7 @@
 #include "cartographer_ros/node_constants.h"
 #include "cartographer_ros/node_options.h"
 #include "cartographer_ros/trajectory_options.h"
+#include "cartographer_ros_msgs/CreatePointcloud.h"
 #include "cartographer_ros_msgs/FinishTrajectory.h"
 #include "cartographer_ros_msgs/GetTrajectoryStates.h"
 #include "cartographer_ros_msgs/ReadMetrics.h"
@@ -149,6 +150,8 @@ class Node {
   bool HandleReadMetrics(
       cartographer_ros_msgs::ReadMetrics::Request& request,
       cartographer_ros_msgs::ReadMetrics::Response& response);
+  bool HandleCreatePointcloud(cartographer_ros_msgs::CreatePointcloud::Request& request,
+                              cartographer_ros_msgs::CreatePointcloud::Response& response);
 
   // Returns the set of SensorIds expected for a trajectory.
   // 'SensorId::id' is the expected ROS topic name.

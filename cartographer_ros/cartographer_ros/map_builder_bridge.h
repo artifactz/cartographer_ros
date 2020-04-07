@@ -31,6 +31,7 @@
 #include "cartographer_ros/sensor_bridge.h"
 #include "cartographer_ros/tf_bridge.h"
 #include "cartographer_ros/trajectory_options.h"
+#include "cartographer_ros_msgs/CreatePointcloud.h"
 #include "cartographer_ros_msgs/SubmapEntry.h"
 #include "cartographer_ros_msgs/SubmapList.h"
 #include "cartographer_ros_msgs/SubmapQuery.h"
@@ -89,6 +90,10 @@ class MapBuilderBridge {
   void HandleTrajectoryQuery(
       cartographer_ros_msgs::TrajectoryQuery::Request& request,
       cartographer_ros_msgs::TrajectoryQuery::Response& response);
+
+  void HandleCreatePointcloud(
+      cartographer_ros_msgs::CreatePointcloud::Request& request,
+      cartographer_ros_msgs::CreatePointcloud::Response& response);
 
   std::map<int /* trajectory_id */,
            ::cartographer::mapping::PoseGraphInterface::TrajectoryState>

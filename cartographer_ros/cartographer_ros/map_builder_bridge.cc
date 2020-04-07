@@ -20,11 +20,16 @@
 #include "absl/strings/str_cat.h"
 #include "cartographer/io/color.h"
 #include "cartographer/io/proto_stream.h"
+#include "cartographer/mapping/3d/hybrid_grid.h"
+#include "cartographer/mapping/3d/submap_3d.h"
 #include "cartographer/mapping/pose_graph.h"
 #include "cartographer_ros/msg_conversion.h"
 #include "cartographer_ros/time_conversion.h"
 #include "cartographer_ros_msgs/StatusCode.h"
 #include "cartographer_ros_msgs/StatusResponse.h"
+
+#include "sensor_msgs/PointCloud2.h"
+#include "sensor_msgs/point_cloud2_iterator.h"
 
 namespace cartographer_ros {
 namespace {
@@ -195,6 +200,78 @@ void MapBuilderBridge::HandleSubmapQuery(
     texture.slice_pose = ToGeometryMsgPose(
         cartographer::transform::ToRigid3(texture_proto.slice_pose()));
   }
+  response.status.message = "Success.";
+  response.status.code = cartographer_ros_msgs::StatusCode::OK;
+}
+
+void MapBuilderBridge::HandleCreatePointcloud(
+    cartographer_ros_msgs::CreatePointcloud::Request& request,
+    cartographer_ros_msgs::CreatePointcloud::Response& response) {
+
+  cartographer::mapping::SubmapId submap_id{request.trajectory_id,
+                                              request.submap_index};
+
+  auto pose_graph = dynamic_cast<cartographer::mapping::PoseGraph*>(map_builder_->pose_graph());
+  auto submap_data = pose_graph->GetSubmapData(submap_id);
+
+  if (submap_data.submap == nullptr) {
+    std::string error = "Requested submap " + std::to_string(submap_id.submap_index) +
+                        " from trajectory " + std::to_string(submap_id.trajectory_id) +
+                        " but it does not exist: maybe it has been trimmed.";
+    LOG(ERROR) << error;
+    response.status.code = cartographer_ros_msgs::StatusCode::NOT_FOUND;
+    response.status.message = error;
+    return;
+  }
+
+  auto submap3d = dynamic_cast<const cartographer::mapping::Submap3D*>(submap_data.submap.get());
+  const cartographer::mapping::HybridGrid& grid = submap3d->high_resolution_hybrid_grid();
+
+  // count points
+  int n_points = 0;
+  for (auto it = cartographer::mapping::HybridGrid::Iterator(grid); !it.Done(); it.Next()) {
+    const float p = cartographer::mapping::ValueToProbability(it.GetValue());
+    if (p >= request.min_probability) {
+        n_points++;
+    }
+  }
+
+  // pointcloud setup
+  ::sensor_msgs::PointCloud2Ptr points_ptr = boost::make_shared<::sensor_msgs::PointCloud2>();
+  points_ptr->header.frame_id = "map";
+  points_ptr->header.stamp = ::ros::Time::now();
+  points_ptr->height = 1;
+  points_ptr->width = n_points;
+  points_ptr->is_dense = true;
+  points_ptr->is_bigendian = false;
+  ::sensor_msgs::PointCloud2Modifier modifier(*points_ptr);
+  modifier.setPointCloud2Fields(4,
+      "x", 1, ::sensor_msgs::PointField::FLOAT32,
+      "y", 1, ::sensor_msgs::PointField::FLOAT32,
+      "z", 1, ::sensor_msgs::PointField::FLOAT32,
+      "intensity", 1, ::sensor_msgs::PointField::FLOAT32);
+  sensor_msgs::PointCloud2Iterator<float> x_it(*points_ptr, "x");
+  sensor_msgs::PointCloud2Iterator<float> y_it(*points_ptr, "y");
+  sensor_msgs::PointCloud2Iterator<float> z_it(*points_ptr, "z");
+  sensor_msgs::PointCloud2Iterator<float> i_it(*points_ptr, "intensity");
+
+  for (auto it = cartographer::mapping::HybridGrid::Iterator(grid); !it.Done(); it.Next()) {
+    const float p = cartographer::mapping::ValueToProbability(it.GetValue());
+    if (p < request.min_probability) {
+      continue;
+    }
+    // transform cell center in submap frame
+    const Eigen::Vector3f center = submap_data.pose.cast<float>() * grid.GetCenterOfCell(it.GetCellIndex());
+    *x_it = center.x();
+    *y_it = center.y();
+    *z_it = center.z();
+    *i_it = p;
+    ++x_it; ++y_it; ++z_it; ++i_it;
+  }
+
+  response.pointcloud = *points_ptr;
+  response.finished = submap3d->insertion_finished();
+  response.resolution = grid.resolution();
   response.status.message = "Success.";
   response.status.code = cartographer_ros_msgs::StatusCode::OK;
 }

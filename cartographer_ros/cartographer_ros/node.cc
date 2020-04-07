@@ -127,6 +127,8 @@ Node::Node(
       kGetTrajectoryStatesServiceName, &Node::HandleGetTrajectoryStates, this));
   service_servers_.push_back(node_handle_.advertiseService(
       kReadMetricsServiceName, &Node::HandleReadMetrics, this));
+  service_servers_.push_back(node_handle_.advertiseService(
+      kCreatePointcloudServiceName, &Node::HandleCreatePointcloud, this));
 
   scan_matched_point_cloud_publisher_ =
       node_handle_.advertise<sensor_msgs::PointCloud2>(
@@ -177,6 +179,14 @@ bool Node::HandleTrajectoryQuery(
     return true;
   }
   map_builder_bridge_.HandleTrajectoryQuery(request, response);
+  return true;
+}
+
+bool Node::HandleCreatePointcloud(
+    ::cartographer_ros_msgs::CreatePointcloud::Request& request,
+    ::cartographer_ros_msgs::CreatePointcloud::Response& response) {
+  absl::MutexLock lock(&mutex_);
+  map_builder_bridge_.HandleCreatePointcloud(request, response);
   return true;
 }
 
